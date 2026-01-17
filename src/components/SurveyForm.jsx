@@ -145,16 +145,23 @@ const SurveyForm = ({
   };
 
   const calculatePoints = () => {
-    let points = 50; // Base points for completing the survey
+    let points = 50; // Base points
 
-    // Points for each MRI machine reported
     points += (formData.mriCount || 0) * 10;
 
-    // Points for detailed information
     if (formData.respondent_email) points += 5;
     if (formData.respondent_phone) points += 5;
     if (formData.challenges) points += 10;
     if (formData.solutions) points += 10;
+
+    const referredBy = localStorage.getItem("referred_by");
+    if (referredBy) points += 25;
+
+    return points;
+  };
+
+  // ✅ USE IT (prevents ESLint error)
+  const pointsPreview = calculatePoints();
 
     // Add 25 points if using a referral code
     const referredBy = localStorage.getItem("referred_by");
