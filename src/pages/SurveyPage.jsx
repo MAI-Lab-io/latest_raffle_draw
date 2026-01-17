@@ -11,12 +11,10 @@ import { useAnonymousSession } from "../hooks/useAnonymousSession";
 const SurveyPage = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [searchParams] = useSearchParams();
-  const surveyType = searchParams.get("type") || "short"; // Default to short survey
+  const surveyType = searchParams.get("type") || "short";
   const [referralCode, setReferralCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const anonymousId = useAnonymousSession();
-  
-  // FIXED: Only declare totalSteps once
   const totalSteps = surveyType === "short" ? 5 : 13;
 
   const [formData, setFormData] = useState({
@@ -57,6 +55,8 @@ const SurveyPage = () => {
     referred_by: "",
   });
 
+  const [points, setPoints] = useState(0);
+
   // Check for referral code in URL parameters
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -64,35 +64,31 @@ const SurveyPage = () => {
     if (refCode) {
       localStorage.setItem("referred_by", refCode);
       setReferralCode(refCode);
-      // Update formData with referral
       setFormData((prev) => ({ ...prev, referred_by: refCode }));
     }
   }, []);
 
-  // Use useCallback to memoize calculatePoints
+  // calculate points
   const calculatePoints = useCallback(() => {
-    let points = 50; // Base points for completing the survey
+    let pts = 50; // Base points
 
-    // Points for each MRI machine reported
-    points += (formData.mriCount || 0) * 10;
+    pts += (formData.mriCount || 0) * 10;
+    if (formData.respondent_email) pts += 5;
+    if (formData.respondent_phone) pts += 5;
+    if (formData.challenges) pts += 10;
+    if (formData.solutions) pts += 10;
+    if (formData.referred_by) pts += 25;
 
-    // Points for detailed information
-    if (formData.respondent_email) points += 5;
-    if (formData.respondent_phone) points += 5;
-    if (formData.challenges) points += 10;
-    if (formData.solutions) points += 10;
-
-    // Add 25 points if using a referral code
-    if (formData.referred_by) {
-      points += 25;
-    }
-
-    return points;
+    return pts;
   }, [formData]);
+
+  // Update points live when form changes
+  useEffect(() => {
+    setPoints(calculatePoints());
+  }, [formData, calculatePoints]);
 
   const awardReferralPoints = async (referrerAnonymousId) => {
     try {
-      // Find the referrer's facility
       const { data: referrerFacility, error } = await supabase
         .from("facilities")
         .select("id, points")
@@ -102,9 +98,7 @@ const SurveyPage = () => {
       if (error) throw error;
 
       if (referrerFacility) {
-        // Add 25 points for successful referral
         const newPoints = (referrerFacility.points || 0) + 25;
-
         await supabase
           .from("facilities")
           .update({ points: newPoints })
@@ -124,47 +118,15 @@ const SurveyPage = () => {
         return;
       }
 
-      const points = calculatePoints();
       const referredBy =
         formData.referred_by || localStorage.getItem("referred_by");
 
-      // Save facility with referral information
       const { data: facility, error: facilityError } = await supabase
         .from("facilities")
         .insert([
           {
-            respondent_name: formData.respondent_name,
-            respondent_email: formData.respondent_email,
-            respondent_phone: formData.respondent_phone,
-            designation: formData.designation,
-            designation_other: formData.designation_other,
-            name: formData.name,
-            address: formData.address,
-            state: formData.state,
-            facility_type: formData.facility_type,
-            facility_type_other: formData.facility_type_other,
-            ownership: formData.ownership,
-            contact_person: formData.contact_person,
-            contact_role: formData.contact_role,
-            contact_phone: formData.contact_phone,
-            contact_email: formData.contact_email,
-            power_availability: formData.power_availability,
-            has_backup_power: formData.has_backup_power,
-            service_engineer_type: formData.service_engineer_type,
-            maintenance_frequency: formData.maintenance_frequency,
-            staff_radiologists: formData.staff_radiologists,
-            staff_radiographers: formData.staff_radiographers,
-            staff_physicists: formData.staff_physicists,
-            cpd_participation: formData.cpd_participation,
-            interest_in_training: formData.interest_in_training,
-            cost_mri: formData.cost_mri,
-            payment_methods: formData.payment_methods,
-            payment_methods_other: formData.payment_methods_other,
-            research_participation: formData.research_participation,
-            has_ethics_committee: formData.has_ethics_committee,
-            challenges: formData.challenges,
-            solutions: formData.solutions,
-            points: points,
+            ...formData,
+            points,
             anonymous_id: anonymousId,
             approved: false,
             referred_by: referredBy,
@@ -176,33 +138,26 @@ const SurveyPage = () => {
 
       if (facilityError) throw facilityError;
 
-      // Save MRI machines
-      const allMachines = [
-        ...formData.mriMachines.map((machine) => ({
-          ...machine,
-          facility_id: facility.id,
-          anonymous_id: anonymousId,
-        })),
-      ];
+      const allMachines = formData.mriMachines.map((m) => ({
+        ...m,
+        facility_id: facility.id,
+        anonymous_id: anonymousId,
+      }));
 
       if (allMachines.length > 0) {
         const { error: machinesError } = await supabase
           .from("machines")
           .insert(allMachines);
-
         if (machinesError) throw machinesError;
       }
 
-      // Award referral points to the referrer if applicable
       if (referredBy) {
         await awardReferralPoints(referredBy);
       }
 
-      // Update points in form data for confirmation display
       setFormData((prev) => ({ ...prev, points }));
 
-      // FIXED: Use dynamic confirmation step based on survey type
-      const confirmationStep = surveyType === "short" ? 6 : 14; // Step 6 for short (5+1), Step 14 for long (13+1)
+      const confirmationStep = surveyType === "short" ? 6 : 14;
       setCurrentStep(confirmationStep);
     } catch (error) {
       console.error("Error submitting survey:", error);
@@ -219,45 +174,26 @@ const SurveyPage = () => {
       if (name === "facility_type" || name === "payment_methods") {
         const currentValues = formData[name] || [];
         if (checked) {
-          setFormData((prev) => ({
-            ...prev,
-            [name]: [...currentValues, value],
-          }));
+          setFormData((prev) => ({ ...prev, [name]: [...currentValues, value] }));
         } else {
           setFormData((prev) => ({
             ...prev,
-            [name]: currentValues.filter((item) => item !== value),
+            [name]: currentValues.filter((v) => v !== value),
           }));
         }
       }
     } else if (type === "radio") {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value === "true",
-      }));
+      setFormData((prev) => ({ ...prev, [name]: value === "true" }));
     } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
   const handleMachineChange = (e, machineType, index, fieldName) => {
-    const { value } = e.target;
-    const machineKey = "mriMachines";
-    const updatedMachines = [...(formData[machineKey] || [])];
-
-    if (!updatedMachines[index]) {
-      updatedMachines[index] = { machine_type: "mri" };
-    }
-
-    updatedMachines[index][fieldName] = value;
-
-    setFormData((prev) => ({
-      ...prev,
-      [machineKey]: updatedMachines,
-    }));
+    const updatedMachines = [...(formData.mriMachines || [])];
+    if (!updatedMachines[index]) updatedMachines[index] = { machine_type: "mri" };
+    updatedMachines[index][fieldName] = e.target.value;
+    setFormData((prev) => ({ ...prev, mriMachines: updatedMachines }));
   };
 
   const nextStep = () => {
@@ -284,12 +220,9 @@ const SurveyPage = () => {
         </div>
 
         <div className="p-6 md:p-8">
-          {/* FIXED: Show progress bar only for form steps, not confirmation */}
           {currentStep <= totalSteps && (
             <>
               <ProgressBar currentStep={currentStep} totalSteps={totalSteps} />
-
-              {/* Add Referral System Component */}
               {currentStep === 1 && (
                 <ReferralSystem
                   onReferralSuccess={(code) => {
@@ -298,15 +231,11 @@ const SurveyPage = () => {
                   }}
                 />
               )}
-
               <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <p className="text-blue-800">
                   <strong>Raffle Points:</strong> Complete the survey to earn
                   raffle tickets. You currently have{" "}
-                  <span className="font-bold text-blue-900">
-                    {calculatePoints()} points
-                  </span>
-                  .
+                  <span className="font-bold text-blue-900">{points} points</span>.
                   {referralCode && (
                     <span className="text-green-600 ml-2">
                       +25 points for using referral code!
@@ -316,16 +245,13 @@ const SurveyPage = () => {
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                   <div
                     className="bg-gradient-to-r from-cyan-400 to-blue-500 h-2 rounded-full"
-                    style={{
-                      width: `${Math.min(100, (calculatePoints() / 200) * 100)}%`,
-                    }}
+                    style={{ width: `${Math.min(100, (points / 200) * 100)}%` }}
                   ></div>
                 </div>
               </div>
             </>
           )}
 
-          {/* Render appropriate survey form based on type and step */}
           {currentStep <= totalSteps ? (
             surveyType === "short" ? (
               <SurveyForm2
@@ -354,13 +280,12 @@ const SurveyPage = () => {
               />
             )
           ) : (
-            // Confirmation step
             <div className="text-center py-12">
               <h2 className="text-3xl font-bold text-green-600 mb-4">
                 Survey Submitted Successfully!
               </h2>
               <p className="text-xl mb-4">
-                You have earned <strong>{formData.points} points</strong>.
+                You have earned <strong>{points} points</strong>.
               </p>
               <p className="text-lg mb-4">
                 Your referral code is: <strong>{anonymousId}</strong>
