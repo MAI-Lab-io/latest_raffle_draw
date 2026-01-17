@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",
+    "@vitejs/plugin-react": "^5.0.1",
     "browser-image-compression": "^2.0.2",
     "emailjs-com": "^3.2.0",
     "leaflet": "^1.9.4",

@@ -1,8 +1,6 @@
 // pages/SurveyPage.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import SurveyForm from "../components/SurveyForm";
-import SurveyForm2 from "../components/SurveyForm2";
-import { useSearchParams } from "react-router-dom";
 import ProgressBar from "../components/ProgressBar";
 import ReferralSystem from "../components/ReferralSystem";
 import { supabase } from "../hooks/useSupabase";
@@ -10,14 +8,10 @@ import { useAnonymousSession } from "../hooks/useAnonymousSession";
 
 const SurveyPage = () => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [searchParams] = useSearchParams();
-  const surveyType = searchParams.get("type") || "short"; // Default to short survey
   const [referralCode, setReferralCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const anonymousId = useAnonymousSession();
-  
-  // FIXED: Only declare totalSteps once
-  const totalSteps = surveyType === "short" ? 5 : 13;
+  const totalSteps = 10; // Reduced from 13 to 10 steps
 
   const [formData, setFormData] = useState({
     respondent_name: "",
@@ -201,9 +195,8 @@ const SurveyPage = () => {
       // Update points in form data for confirmation display
       setFormData((prev) => ({ ...prev, points }));
 
-      // FIXED: Use dynamic confirmation step based on survey type
-      const confirmationStep = surveyType === "short" ? 6 : 14; // Step 6 for short (5+1), Step 14 for long (13+1)
-      setCurrentStep(confirmationStep);
+      // Move to confirmation step
+      setCurrentStep(10);
     } catch (error) {
       console.error("Error submitting survey:", error);
       alert("Error submitting survey. Please try again.");
@@ -284,100 +277,55 @@ const SurveyPage = () => {
         </div>
 
         <div className="p-6 md:p-8">
-          {/* FIXED: Show progress bar only for form steps, not confirmation */}
-          {currentStep <= totalSteps && (
-            <>
-              <ProgressBar currentStep={currentStep} totalSteps={totalSteps} />
+          <ProgressBar currentStep={currentStep} totalSteps={totalSteps} />
 
-              {/* Add Referral System Component */}
-              {currentStep === 1 && (
-                <ReferralSystem
-                  onReferralSuccess={(code) => {
-                    setReferralCode(code);
-                    setFormData((prev) => ({ ...prev, referred_by: code }));
-                  }}
-                />
-              )}
-
-              <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <p className="text-blue-800">
-                  <strong>Raffle Points:</strong> Complete the survey to earn
-                  raffle tickets. You currently have{" "}
-                  <span className="font-bold text-blue-900">
-                    {calculatePoints()} points
-                  </span>
-                  .
-                  {referralCode && (
-                    <span className="text-green-600 ml-2">
-                      +25 points for using referral code!
-                    </span>
-                  )}
-                </p>
-                <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-gradient-to-r from-cyan-400 to-blue-500 h-2 rounded-full"
-                    style={{
-                      width: `${Math.min(100, (calculatePoints() / 200) * 100)}%`,
-                    }}
-                  ></div>
-                </div>
-              </div>
-            </>
+          {/* Add Referral System Component */}
+          {currentStep === 1 && (
+            <ReferralSystem
+              onReferralSuccess={(code) => {
+                setReferralCode(code);
+                setFormData((prev) => ({ ...prev, referred_by: code }));
+              }}
+            />
           )}
 
-          {/* Render appropriate survey form based on type and step */}
-          {currentStep <= totalSteps ? (
-            surveyType === "short" ? (
-              <SurveyForm2
-                currentStep={currentStep}
-                formData={formData}
-                handleChange={handleChange}
-                handleMachineChange={handleMachineChange}
-                nextStep={nextStep}
-                prevStep={prevStep}
-                totalSteps={totalSteps}
-                submitSurvey={submitSurvey}
-                submitting={submitting}
-                setFormData={setFormData}
-              />
-            ) : (
-              <SurveyForm
-                currentStep={currentStep}
-                formData={formData}
-                handleChange={handleChange}
-                handleMachineChange={handleMachineChange}
-                nextStep={nextStep}
-                prevStep={prevStep}
-                totalSteps={totalSteps}
-                submitSurvey={submitSurvey}
-                submitting={submitting}
-              />
-            )
-          ) : (
-            // Confirmation step
-            <div className="text-center py-12">
-              <h2 className="text-3xl font-bold text-green-600 mb-4">
-                Survey Submitted Successfully!
-              </h2>
-              <p className="text-xl mb-4">
-                You have earned <strong>{formData.points} points</strong>.
+          {currentStep < 10 && (
+            <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <p className="text-blue-800">
+                <strong>Raffle Points:</strong> Complete the survey to earn
+                raffle tickets. You currently have{" "}
+                <span className="font-bold text-blue-900">
+                  {calculatePoints()} points
+                </span>
+                .
+                {referralCode && (
+                  <span className="text-green-600 ml-2">
+                    +25 points for using referral code!
+                  </span>
+                )}
               </p>
-              <p className="text-lg mb-4">
-                Your referral code is: <strong>{anonymousId}</strong>
-              </p>
-              <p className="text-gray-600">
-                Share this code with others to earn bonus points!
-              </p>
-              <div className="mt-8">
-                <button
-                  onClick={() => window.location.reload()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg"
-                >
-                  Submit Another Response
-                </button>
+              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                <div
+                  className="bg-gradient-to-r from-cyan-400 to-blue-500 h-2 rounded-full"
+                  style={{
+                    width: `${Math.min(100, (calculatePoints() / 200) * 100)}%`,
+                  }}
+                ></div>
               </div>
             </div>
           )}
+
+          <SurveyForm
+            currentStep={currentStep}
+            formData={formData}
+            handleChange={handleChange}
+            handleMachineChange={handleMachineChange}
+            nextStep={nextStep}
+            prevStep={prevStep}
+            totalSteps={totalSteps}
+            submitSurvey={submitSurvey}
+            submitting={submitting}
+          />
         </div>
       </div>
     </div>
